@@ -1,16 +1,16 @@
 {
   "name": "team35-hub",
-  "homepage": "https://kidmak1412.github.io/team35-hub",  // <--- เพิ่มบรรทัดนี้ด้านบนสุด
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://kidmak1412.github.io/team35-hub",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "predeploy": "npm run build",      // <--- เพิ่มบรรทัดนี้
-    "deploy": "gh-pages -d dist",       // <--- เพิ่มบรรทัดนี้
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
