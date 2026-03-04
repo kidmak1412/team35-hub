@@ -8,33 +8,43 @@ import {
 
 // ==========================================
 // 🔴 ใส่ URL จาก Google Apps Script ที่นี่ 🔴
-// (หากยังไม่มี โค้ดจะใช้ข้อมูลจำลองแทน เพื่อไม่ให้จอขาว)
 // ==========================================
-const API_URL = "https://script.google.com/macros/s/AKfycbwqgjSeHNVtImXq6ncvrDAhtk6TP1wH-GwZ4A-64_vxqL8DUqyCLMrq5SsWg42lxObz/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwTSFB6OcBMnNYVQxXgOnqnO8x3Y27Fp0yDLlaB_3zsUdVLlf__FHe2nHSIUjNY0Izk/exec";
 
 // --- ฟังก์ชันช่วยเหลือ ---
 const generateCanvasImage = async (elementId, formatWidth) => {
   try {
-    await document.fonts.ready;
+    try { await document.fonts.ready; } catch(e) {}
+    
     if (!window.html2canvas) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
+      try {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('Failed to load html2canvas'));
+          document.head.appendChild(script);
+        });
+      } catch (err) {
+        console.error(err);
+        alert('ไม่สามารถโหลดเครื่องมือสร้างภาพได้ กรุณาตรวจสอบอินเทอร์เน็ต');
+        return null;
+      }
     }
+    
+    // หน่วงเวลาเล็กน้อยให้ DOM วาดตารางและหน้าตาเสร็จสมบูรณ์ 100%
+    await new Promise(res => setTimeout(res, 800));
+
     const element = document.getElementById(elementId);
     if (!element) return null;
 
     const canvas = await window.html2canvas(element, {
-      scale: 3, 
+      scale: 2, 
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      letterRendering: true,
-      windowWidth: formatWidth,
+      windowWidth: formatWidth
     });
     return canvas.toDataURL('image/jpeg', 0.95);
   } catch (error) {
@@ -51,52 +61,51 @@ const getFormattedDate = () => {
 
 // --- API Helper ---
 const fetchApi = async (action, payload = {}) => {
-  if(API_URL === "YOUR_GOOGLE_SCRIPT_URL_HERE") return null; // ข้ามการเรียก API ถ้ายังไม่ได้ใส่ URL
+  if (!API_URL || API_URL === "YOUR_GOOGLE_SCRIPT_URL_HERE") {
+    console.warn("⚠️ API_URL is missing.");
+    return null;
+  }
+  
   try {
     const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, payload })
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify({ action, payload }),
+      redirect: "follow"
     });
+
     const result = await response.json();
     if (result.status === 'success') return result.data;
     throw new Error(result.message);
   } catch (error) {
-    console.error("API Error:", error);
-    throw error;
+    console.error("API Fetch Error:", error);
+    return null;
+  }
+};
+
+// ฟังก์ชันแปลง JSON ให้ปลอดภัย
+const parseJSONSafe = (str) => {
+  if (!str) return [];
+  if (Array.isArray(str)) return str;
+  try {
+    let cleanStr = typeof str === 'string' ? str.replace(/^'/, '').replace(/'$/, '').trim() : JSON.stringify(str);
+    if (cleanStr.startsWith('"') && cleanStr.endsWith('"')) {
+        cleanStr = JSON.parse(cleanStr);
+    }
+    const parsed = typeof cleanStr === 'string' ? JSON.parse(cleanStr) : cleanStr;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch(e) {
+    return [];
   }
 };
 
 // --- MOCK DATA ---
-const initialUsers = [
-  { id: 1, username: 'admin', password: 'password', role: 'admin', name: 'ผู้ดูแลระบบสูงสุด' },
-  { 
-    id: 2, username: 'agent01', password: 'password', role: 'member', name: 'ตัวแทน ทดสอบ', 
-    targetFYP: 1000000, 
-    performanceRecords: [
-      { month: 'มกราคม', submitted: 150000, approved: 100000, commission: 35000, lastUpdated: '31 ม.ค. 2024 16:30' },
-      { month: 'กุมภาพันธ์', submitted: 350000, approved: 350000, commission: 122500, lastUpdated: '28 ก.พ. 2024 09:15' }
-    ],
-    specialQualifications: []
-  }
-];
-
-const initialQuals = [
-  { id: 1, name: 'ทริปญี่ปุ่น (Q3)', target: 800000 }, 
-  { id: 2, name: 'MDOT 2024', target: 1500000 },
-  { id: 3, name: 'MBRT 2027', target: 1200000 }
-];
-
-const initialVideos = [
-  { id: 1, title: 'เทคนิคการเปิดใจลูกค้า', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', category: 'ทักษะการขาย' },
-  { id: 2, title: 'สรุปแบบประกันสุขภาพ อัปเดต 2024', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', category: 'ความรู้แบบประกัน' }
-];
-
-const initialContents = [
-  { id: 1, type: 'image', title: 'ภาพสวัสดีวันจันทร์ พร้อมคำคม', url: 'https://placehold.co/400x400/0B162C/D4AF37?text=Happy+Monday' },
-  { id: 2, type: 'video', title: 'คลิปสั้น โปรโมทประกันออมทรัพย์', url: 'https://placehold.co/400x400/D4AF37/0B162C?text=Video+Content' },
-  { id: 3, type: 'caption', title: 'แคปชั่นขายประกันสุขภาพ', content: 'สุขภาพดีไม่มีขาย อยากได้ต้องดูแลตัวเอง... แต่ถ้าเจ็บป่วยขึ้นมา ให้เราดูแลค่าใช้จ่ายนะครับ 💙 #ประกันสุขภาพ #คุ้มครองคุ้มค่า' }
-];
+const initialUsers = [];
+const initialQuals = [];
+const initialVideos = [];
+const initialContents = [];
 
 const memberMenu = [
   { id: 'video_hub', icon: Video, label: 'คลังวีดีโอความรู้' },
@@ -119,9 +128,9 @@ const adminMenu = [
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
+  const [isSystemLoading, setIsSystemLoading] = useState(true);
   const [user, setUser] = useState(null);
   
-  // ใช้ Mock Data เป็นค่าเริ่มต้น (เพื่อไม่ให้เว็บพังหากยังไม่เชื่อม API)
   const [usersDb, setUsersDb] = useState(initialUsers);
   const [videosDb, setVideosDb] = useState(initialVideos);
   const [contentsDb, setContentsDb] = useState(initialContents);
@@ -137,28 +146,55 @@ export default function App() {
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
 
   useEffect(() => {
-    // เพิ่มฟอนต์
     const link = document.createElement('link');
     link.href = 'https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800;900&display=swap';
     link.rel = 'stylesheet';
     document.head.appendChild(link);
 
-    // ดึงข้อมูลจาก API เมื่อเริ่มต้น
     const loadData = async () => {
-      const data = await fetchApi('getAllData');
-      if(data) {
-        if(data.users) setUsersDb(data.users);
-        if(data.videos) setVideosDb(data.videos);
-        if(data.contents) setContentsDb(data.contents);
-        if(data.qualifications) setQualificationsDb(data.qualifications);
-        if(data.globalTarget) setGlobalTargetFYP(Number(data.globalTarget));
+      setIsSystemLoading(true);
+      try {
+        const data = await fetchApi('getAllData', { year: new Date().getFullYear() });
+        
+        if(data) {
+          if(data.users && Array.isArray(data.users)) {
+            const processedUsers = data.users.map(u => ({
+              ...u,
+              username: u.username || u.Username || u.USERNAME || u['ชื่อผู้ใช้งาน'] || '',
+              password: String(u.password || u.Password || u.PASSWORD || u['รหัสผ่าน'] || ''),
+              role: String(u.role || u.Role || u.ROLE || 'member').toLowerCase(),
+              name: u.name || u.Name || u.NAME || u['ชื่อ-นามสกุล'] || '',
+              id: Number(u.id || u.Id || u.ID || Date.now()),
+              targetFYP: Number(u.targetFYP || u.TargetFYP || u.targetfyp || 0),
+              performanceRecords: parseJSONSafe(u.performanceRecords),
+              specialQualifications: parseJSONSafe(u.specialQualifications)
+            }));
+            setUsersDb(processedUsers);
+          }
+          if(Array.isArray(data.videos)) setVideosDb(data.videos);
+          if(Array.isArray(data.contents)) setContentsDb(data.contents);
+          if(Array.isArray(data.qualifications)) setQualificationsDb(data.qualifications);
+          if(data.globalTarget) setGlobalTargetFYP(Number(data.globalTarget) || 1000000);
+        }
+      } catch (err) {
+        console.error("Data Load Error:", err);
+      } finally {
+        setIsSystemLoading(false);
       }
     };
     loadData();
   }, []);
 
   const handleLogin = (username, password) => {
-    const foundUser = usersDb.find(u => u.username === username && u.password === password);
+    const inputUser = String(username).trim().toLowerCase();
+    const inputPass = String(password).trim();
+
+    const foundUser = (usersDb || []).find(u => {
+      const dbUser = String(u.username || '').trim().toLowerCase();
+      const dbPass = String(u.password || '').trim();
+      return dbUser === inputUser && dbPass === inputPass;
+    });
+    
     if (foundUser) {
       setUser(foundUser);
       setCurrentView(foundUser.role === 'admin' ? 'admin_dashboard' : 'video_hub');
@@ -168,13 +204,50 @@ export default function App() {
   };
 
   const handleRegister = async (newUserData) => {
+    const inputUser = String(newUserData.username || '').trim().toLowerCase();
+    const inputName = String(newUserData.name || '').trim().toLowerCase();
+
+    const isDuplicate = (usersDb || []).some(u => {
+      const dbUser = String(u.username || '').trim().toLowerCase();
+      const dbName = String(u.name || '').trim().toLowerCase();
+      return (dbUser === inputUser && inputUser !== '') || (dbName === inputName && inputName !== '');
+    });
+
+    if (isDuplicate) {
+      showAlert('ชื่อผู้ใช้งาน หรือ ชื่อ-นามสกุล นี้มีคนใช้แล้ว กรุณาใช้ข้อมูลอื่นหรือกดลืมรหัสผ่านครับ');
+      return false; 
+    }
+
     const newUser = { ...newUserData, id: Date.now(), role: 'member', performanceRecords: [], specialQualifications: [] };
-    setUsersDb([...usersDb, newUser]);
-    
-    // Sync API แบบเบื้องหลัง
-    fetchApi('registerUser', newUser).catch(() => {});
+    setUsersDb([...(usersDb || []), newUser]);
+    fetchApi('registerUser', newUser).catch(e => console.error("Register Error:", e));
     
     showAlert('สมัครสมาชิกสำเร็จ กรุณาล็อกอิน');
+    return true;
+  };
+
+  const handleResetPassword = async (username, name, newPassword) => {
+    const inputUser = String(username).trim().toLowerCase();
+    const inputName = String(name).trim().toLowerCase();
+
+    const userIndex = (usersDb || []).findIndex(u => {
+      const dbUser = String(u.username || '').trim().toLowerCase();
+      const dbName = String(u.name || '').trim().toLowerCase();
+      return dbUser === inputUser && dbName === inputName;
+    });
+
+    if (userIndex !== -1) {
+      const updatedUsers = [...usersDb];
+      updatedUsers[userIndex].password = newPassword;
+      setUsersDb(updatedUsers);
+
+      fetchApi('resetPassword', { username, name, newPassword }).catch(() => {});
+      showAlert('รีเซ็ตรหัสผ่านสำเร็จ! กรุณาล็อกอินด้วยรหัสผ่านใหม่');
+      return true;
+    } else {
+      showAlert('ไม่พบข้อมูลผู้ใช้งานที่ตรงกับ "ชื่อ-นามสกุล" และ "Username" นี้ในระบบ');
+      return false;
+    }
   };
 
   const handleLogout = () => {
@@ -182,10 +255,20 @@ export default function App() {
     setCurrentView('login');
   };
 
+  if (isSystemLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0B162C] text-[#D4AF37]" style={{ fontFamily: "'Prompt', sans-serif" }}>
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <h2 className="text-xl font-bold">กำลังโหลดข้อมูลจากฐานข้อมูล...</h2>
+        <p className="text-sm text-slate-400 mt-2">กรุณารอสักครู่ ระบบกำลังจัดเตรียมข้อมูล</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <>
-        <AuthScreen onLogin={handleLogin} onRegister={handleRegister} showAlert={showAlert} />
+        <AuthScreen onLogin={handleLogin} onRegister={handleRegister} onResetPassword={handleResetPassword} showAlert={showAlert} />
         <CustomDialog dialog={dialog} closeDialog={closeDialog} />
       </>
     );
@@ -194,6 +277,7 @@ export default function App() {
   const activeMenus = user.role === 'admin' ? adminMenu : memberMenu;
   const activeMenuItem = activeMenus.find(m => m.id === currentView) || activeMenus[0];
   const ActiveIcon = activeMenuItem.icon;
+  const viewToRender = activeMenuItem.id; 
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800" style={{ fontFamily: "'Prompt', sans-serif" }}>
@@ -203,7 +287,10 @@ export default function App() {
             src="LOGO%20TEAM%2035.jpg" 
             alt="Team 35 Logo" 
             className="w-8 h-8 object-contain bg-white rounded-md p-0.5" 
-            onError={(e) => { e.target.style.display = 'none'; }} 
+            onError={(e) => { 
+                e.target.onerror = null; 
+                e.target.src = 'https://placehold.co/100x100/0B162C/D4AF37?text=T35'; 
+            }} 
           />
           <h1 className="font-bold text-lg truncate text-white">35 DA&K Hub</h1>
         </div>
@@ -214,7 +301,7 @@ export default function App() {
 
       <Sidebar 
         role={user.role} 
-        currentView={currentView} 
+        currentView={viewToRender} 
         setCurrentView={(view) => { setCurrentView(view); setIsMobileMenuOpen(false); }} 
         onLogout={handleLogout}
         isOpen={isMobileMenuOpen}
@@ -235,22 +322,22 @@ export default function App() {
 
           {user.role === 'admin' ? (
             <>
-              {currentView === 'admin_dashboard' && <AdminUsers users={usersDb} setUsers={setUsersDb} showConfirm={showConfirm} />}
-              {currentView === 'admin_performance' && <AdminPerformance users={usersDb} setUsers={setUsersDb} qualifications={qualificationsDb} setQualifications={setQualificationsDb} globalTargetFYP={globalTargetFYP} setGlobalTargetFYP={setGlobalTargetFYP} showAlert={showAlert} showConfirm={showConfirm} />}
-              {currentView === 'admin_videos' && <AdminVideos videos={videosDb} setVideos={setVideosDb} showAlert={showAlert} showConfirm={showConfirm} />}
-              {currentView === 'admin_contents' && <AdminContents contents={contentsDb} setContents={setContentsDb} showAlert={showAlert} showConfirm={showConfirm} />}
+              {viewToRender === 'admin_dashboard' && <AdminUsers users={usersDb || []} setUsers={setUsersDb} showConfirm={showConfirm} fetchApi={fetchApi} />}
+              {viewToRender === 'admin_performance' && <AdminPerformance users={usersDb || []} setUsers={setUsersDb} qualifications={qualificationsDb || []} setQualifications={setQualificationsDb} globalTargetFYP={globalTargetFYP} setGlobalTargetFYP={setGlobalTargetFYP} showAlert={showAlert} showConfirm={showConfirm} fetchApi={fetchApi} />}
+              {viewToRender === 'admin_videos' && <AdminVideos videos={videosDb || []} setVideos={setVideosDb} showAlert={showAlert} showConfirm={showConfirm} fetchApi={fetchApi} />}
+              {viewToRender === 'admin_contents' && <AdminContents contents={contentsDb || []} setContents={setContentsDb} showAlert={showAlert} showConfirm={showConfirm} fetchApi={fetchApi} />}
             </>
           ) : (
             <>
-              {currentView === 'video_hub' && <VideoHub videos={videosDb} />}
-              {currentView === 'content_hub' && <ContentHub contents={contentsDb} showAlert={showAlert} />}
-              {currentView === 'performance' && <PerformanceTracker user={user} usersDb={usersDb} setUsersDb={setUsersDb} qualificationsDb={qualificationsDb} globalTargetFYP={globalTargetFYP} showAlert={showAlert} />}
-              {currentView === 'comm_calc' && <CommissionCalc />}
-              {currentView === 'irr_calc' && <IRRCalculator showAlert={showAlert} user={user} />}
-              {currentView === 'savings_pres' && <ImageToTool toolName="สร้างตารางเสนอประกันออมทรัพย์" resultType="savings" />}
-              {currentView === 'income_pres' && <ImageToTool toolName="สร้างตารางเสนอชดเชยรายได้" resultType="income" />}
-              {currentView === 'legacy_pres' && <ImageToTool toolName="สร้างตารางเสนอประกันมรดก" resultType="legacy" />}
-              {currentView === 'health_pres' && <HealthPresentation />}
+              {viewToRender === 'video_hub' && <VideoHub videos={videosDb || []} />}
+              {viewToRender === 'content_hub' && <ContentHub contents={contentsDb || []} showAlert={showAlert} />}
+              {viewToRender === 'performance' && <PerformanceTracker user={user} usersDb={usersDb || []} setUsersDb={setUsersDb} qualificationsDb={qualificationsDb || []} globalTargetFYP={globalTargetFYP} showAlert={showAlert} fetchApi={fetchApi} />}
+              {viewToRender === 'comm_calc' && <CommissionCalc />}
+              {viewToRender === 'irr_calc' && <IRRCalculator showAlert={showAlert} user={user} />}
+              {viewToRender === 'savings_pres' && <ImageToTool toolName="สร้างตารางเสนอประกันออมทรัพย์" resultType="savings" />}
+              {viewToRender === 'income_pres' && <ImageToTool toolName="สร้างตารางเสนอชดเชยรายได้" resultType="income" />}
+              {viewToRender === 'legacy_pres' && <ImageToTool toolName="สร้างตารางเสนอประกันมรดก" resultType="legacy" />}
+              {viewToRender === 'health_pres' && <HealthPresentation />}
             </>
           )}
         </div>
@@ -272,7 +359,7 @@ function CustomDialog({ dialog, closeDialog }) {
              {dialog.type === 'confirm' ? <AlertTriangle size={32} /> : <Info size={32} className="text-[#D4AF37]" />}
           </div>
           <h3 className="text-lg font-bold text-[#0B162C] mb-2">{dialog.type === 'confirm' ? 'ยืนยันการทำรายการ' : 'แจ้งเตือน'}</h3>
-          <p className="text-slate-600 text-sm mb-6">{dialog.message}</p>
+          <p className="text-slate-600 text-sm mb-6 whitespace-pre-line">{dialog.message}</p>
           <div className="flex gap-3 justify-center">
             {dialog.type === 'confirm' && (
               <button onClick={closeDialog} className="px-5 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">ยกเลิก</button>
@@ -287,8 +374,8 @@ function CustomDialog({ dialog, closeDialog }) {
   );
 }
 
-function AuthScreen({ onLogin, onRegister, showAlert }) {
-  const [isLogin, setIsLogin] = useState(true);
+function AuthScreen({ onLogin, onRegister, onResetPassword, showAlert }) {
+  const [mode, setMode] = useState('login'); 
   const [formData, setFormData] = useState({ username: '', password: '', name: '' });
   const [showPassword, setShowPassword] = useState(false);
   const timeoutRef = useRef(null);
@@ -312,14 +399,20 @@ function AuthScreen({ onLogin, onRegister, showAlert }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLogin) {
+    if (mode === 'login') {
       onLogin(formData.username, formData.password);
-    } else {
+    } else if (mode === 'register') {
       if(!formData.username || !formData.password || !formData.name) return showAlert('กรอกข้อมูลให้ครบถ้วน');
-      onRegister(formData);
-      setIsLogin(true);
+      const isSuccess = await onRegister(formData);
+      if (isSuccess) {
+         setMode('login');
+      }
+    } else if (mode === 'forgot') {
+      if(!formData.username || !formData.password || !formData.name) return showAlert('กรอกข้อมูลให้ครบถ้วน');
+      const isSuccess = await onResetPassword(formData.username, formData.name, formData.password);
+      if(isSuccess) setMode('login'); 
     }
   };
 
@@ -329,37 +422,43 @@ function AuthScreen({ onLogin, onRegister, showAlert }) {
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[#D4AF37] opacity-10 rounded-full blur-3xl"></div>
 
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border-t-4 border-[#D4AF37]">
-        <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-4 bg-slate-50 rounded-xl flex items-center justify-center shadow-md p-2 border border-slate-100">
+        <div className="text-center mb-6">
+          <div className="w-28 h-28 mx-auto mb-4 bg-slate-50 rounded-xl flex items-center justify-center shadow-md p-2 border border-slate-100">
             <img 
               src="LOGO%20TEAM%2035.jpg" 
               alt="Team 35 Logo" 
               className="w-full h-full object-contain"
               onError={(e) => { 
-                e.target.style.display = 'none'; 
-                e.target.parentNode.innerHTML = '<div class="text-[#0B162C] font-bold text-xl">TEAM 35</div>';
+                e.target.onerror = null;
+                e.target.src = 'https://placehold.co/150x150/0B162C/D4AF37?text=T35';
               }} 
             />
           </div>
-          <h1 className="text-3xl font-bold text-[#0B162C]">35 DA&K Hub</h1>
-          <p className="text-[#D4AF37] font-medium mt-1">Digital Armory & Knowledge Hub</p>
+          <h1 className="text-3xl font-bold text-[#0B162C]">
+            {mode === 'forgot' ? 'รีเซ็ตรหัสผ่าน' : '35 DA&K Hub'}
+          </h1>
+          {mode === 'forgot' && <p className="text-sm text-slate-500 mt-2">กรุณากรอกข้อมูลยืนยันตัวตนให้ตรงกับที่เคยสมัคร</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {(mode === 'register' || mode === 'forgot') && (
             <div>
-              <label className="block text-sm font-medium text-[#0B162C] mb-1">ชื่อ-นามสกุล</label>
+              <label className="block text-sm font-medium text-[#0B162C] mb-1">ชื่อ-นามสกุล (ที่ใช้สมัคร)</label>
               <input type="text" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#D4AF37] outline-none transition-shadow" 
                 onChange={e => setFormData({...formData, name: e.target.value})} />
             </div>
           )}
+          
           <div>
             <label className="block text-sm font-medium text-[#0B162C] mb-1">ชื่อผู้ใช้งาน (Username)</label>
             <input type="text" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#D4AF37] outline-none transition-shadow" 
               onChange={e => setFormData({...formData, username: e.target.value})} />
           </div>
+          
           <div>
-            <label className="block text-sm font-medium text-[#0B162C] mb-1">รหัสผ่าน</label>
+            <label className="block text-sm font-medium text-[#0B162C] mb-1">
+              {mode === 'forgot' ? 'ตั้งรหัสผ่านใหม่' : 'รหัสผ่าน'}
+            </label>
             <div className="relative">
               <input type={showPassword ? "text" : "password"} required className="w-full p-3 pr-12 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#D4AF37] outline-none transition-shadow" 
                 onChange={e => setFormData({...formData, password: e.target.value})} />
@@ -372,24 +471,29 @@ function AuthScreen({ onLogin, onRegister, showAlert }) {
               </button>
             </div>
           </div>
-          <button type="submit" className="w-full bg-[#D4AF37] text-[#0B162C] font-bold py-3 rounded-lg hover:bg-[#C5A059] shadow-lg shadow-[#D4AF37]/30 transition-all transform hover:-translate-y-0.5">
-            {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+          
+          <button type="submit" className="w-full bg-[#D4AF37] text-[#0B162C] font-bold py-3 rounded-lg hover:bg-[#C5A059] shadow-lg shadow-[#D4AF37]/30 transition-all transform hover:-translate-y-0.5 mt-2">
+            {mode === 'login' ? 'เข้าสู่ระบบ' : (mode === 'register' ? 'ยืนยันการสมัคร' : 'บันทึกรหัสผ่านใหม่')}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
-          <button onClick={() => setIsLogin(!isLogin)} className="text-[#0B162C] hover:text-[#D4AF37] hover:underline text-sm font-medium transition-colors">
-            {isLogin ? 'ยังไม่มีบัญชี? สมัครสมาชิกที่นี่' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
-          </button>
+        <div className="mt-6 flex flex-col gap-2 text-center">
+          {mode === 'login' && (
+            <>
+              <button type="button" onClick={() => setMode('register')} className="text-[#0B162C] hover:text-[#D4AF37] hover:underline text-sm font-medium transition-colors">
+                ยังไม่มีบัญชี? สมัครสมาชิกที่นี่
+              </button>
+              <button type="button" onClick={() => setMode('forgot')} className="text-slate-500 hover:text-[#D4AF37] text-xs transition-colors mt-2">
+                ลืมรหัสผ่าน? กดที่นี่เพื่อรีเซ็ต
+              </button>
+            </>
+          )}
+          {mode !== 'login' && (
+            <button type="button" onClick={() => setMode('login')} className="text-slate-500 hover:text-[#D4AF37] hover:underline text-sm font-medium transition-colors">
+              ย้อนกลับไปหน้าเข้าสู่ระบบ
+            </button>
+          )}
         </div>
-        
-        {isLogin && (
-           <div className="mt-6 p-4 bg-[#FDFBF7] border border-[#D4AF37]/30 rounded-lg text-xs text-[#0B162C] text-left">
-             <p className="font-bold mb-1 text-[#D4AF37]">ทดสอบระบบ (Demo Credentials):</p>
-             <p>Admin: admin / password</p>
-             <p>Member: agent01 / password</p>
-           </div>
-        )}
       </div>
     </div>
   );
@@ -417,8 +521,8 @@ function Sidebar({ role, currentView, setCurrentView, onLogout, isOpen, closeMen
                 alt="" 
                 className="w-full h-full object-contain"
                 onError={(e) => { 
-                  e.target.style.display = 'none';
-                  e.target.parentNode.innerHTML = '<span class="text-[#0B162C] font-bold text-xs">T35</span>';
+                  e.target.onerror = null;
+                  e.target.src = 'https://placehold.co/100x100/0B162C/D4AF37?text=T35';
                 }} 
               />
             </div>
@@ -434,8 +538,8 @@ function Sidebar({ role, currentView, setCurrentView, onLogout, isOpen, closeMen
               alt="Team 35" 
               className="w-full h-full object-contain"
               onError={(e) => { 
-                e.target.style.display = 'none';
-                e.target.parentNode.innerHTML = '<span class="text-[#0B162C] font-bold text-xl">T35</span>';
+                e.target.onerror = null;
+                e.target.src = 'https://placehold.co/150x150/0B162C/D4AF37?text=T35';
               }} 
             />
           </div>
@@ -472,7 +576,7 @@ function Sidebar({ role, currentView, setCurrentView, onLogout, isOpen, closeMen
   );
 }
 
-function VideoHub({ videos }) {
+function VideoHub({ videos = [] }) {
   const categories = [...new Set(videos.map(v => v.category))];
   const [activeCat, setActiveCat] = useState('All');
 
@@ -514,7 +618,7 @@ function VideoHub({ videos }) {
   );
 }
 
-function ContentHub({ contents, showAlert }) {
+function ContentHub({ contents = [], showAlert }) {
   const handleDownload = (content) => {
     showAlert(`ดาวน์โหลด / คัดลอก: ${content.title} เรียบร้อยแล้ว`);
   };
@@ -553,17 +657,17 @@ function ContentHub({ contents, showAlert }) {
   );
 }
 
-function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globalTargetFYP, showAlert }) {
+function PerformanceTracker({ user, usersDb = [], setUsersDb, qualificationsDb = [], globalTargetFYP, showAlert, fetchApi }) {
   const currentUser = usersDb.find(u => u.id === user.id) || {};
   const targetFYP = globalTargetFYP;
-  const performanceRecords = currentUser.performanceRecords || [];
-  const specialQualifications = currentUser.specialQualifications || [];
+  const performanceRecords = Array.isArray(currentUser.performanceRecords) ? currentUser.performanceRecords : [];
+  const specialQualifications = Array.isArray(currentUser.specialQualifications) ? currentUser.specialQualifications : [];
   
   const allQuals = [...qualificationsDb, ...specialQualifications];
   
-  const totalSubmitted = performanceRecords.reduce((sum, record) => sum + record.submitted, 0);
-  const totalApproved = performanceRecords.reduce((sum, record) => sum + record.approved, 0);
-  const totalCommission = performanceRecords.reduce((sum, record) => sum + (record.commission || 0), 0);
+  const totalSubmitted = performanceRecords.reduce((sum, record) => sum + (Number(record.submitted) || 0), 0);
+  const totalApproved = performanceRecords.reduce((sum, record) => sum + (Number(record.approved) || 0), 0);
+  const totalCommission = performanceRecords.reduce((sum, record) => sum + (Number(record.commission) || 0), 0);
   
   const percent = targetFYP > 0 ? Math.min((totalApproved / targetFYP) * 100, 100) : 0;
 
@@ -594,10 +698,15 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
       setInputComm(record.commission || 0);
       setLastUpdatedDisplay(record.lastUpdated || '');
     } else {
-      const otherRecords = performanceRecords.filter(r => r.month !== selectedMonth);
-      const sumSubOther = otherRecords.reduce((s, r) => s + r.submitted, 0);
-      const sumAppOther = otherRecords.reduce((s, r) => s + r.approved, 0);
-      const pendingFYP = sumSubOther - sumAppOther;
+      let pendingFYP = 0;
+      const currentMonthIdx = months.indexOf(selectedMonth);
+      if (currentMonthIdx > 0) {
+        const prevMonthName = months[currentMonthIdx - 1];
+        const prevMonthRecord = performanceRecords.find(r => r.month === prevMonthName);
+        if (prevMonthRecord) {
+          pendingFYP = (Number(prevMonthRecord.submitted) || 0) - (Number(prevMonthRecord.approved) || 0);
+        }
+      }
       
       setInputSub(pendingFYP > 0 ? pendingFYP : 0);
       setInputApp(0);
@@ -616,16 +725,21 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
     setIsGenerating(true);
     setPreviewImageUrl(null);
     
+    // เริ่มกระบวนการจับภาพหลังจากหน้าจอพร้อม
     setTimeout(async () => {
-      const width = exportFormat === '4:5' ? 800 : 794;
-      const imageUrl = await generateCanvasImage('hidden-export-node', width);
-      if (imageUrl) {
-        setPreviewImageUrl(imageUrl);
-      } else {
-        showAlert('ไม่สามารถสร้างภาพตัวอย่างได้');
+      try {
+        const width = exportFormat === '4:5' ? 800 : 794;
+        const imageUrl = await generateCanvasImage('hidden-export-node', width);
+        if (imageUrl) {
+          setPreviewImageUrl(imageUrl);
+        } else {
+          showAlert('ไม่สามารถสร้างภาพตัวอย่างได้ ลองใหม่อีกครั้ง');
+        }
+      } catch (err) {
+        showAlert('เกิดข้อผิดพลาดในการประมวลผลภาพ');
       }
       setIsGenerating(false);
-    }, 100);
+    }, 1500); // เผื่อเวลาไว้ 1.5 วินาทีเพื่อให้ Browser เรนเดอร์ CSS สมบูรณ์
   };
 
   const handleUpdatePerformance = (e) => {
@@ -652,6 +766,15 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
     setUsersDb(usersDb.map(u => 
       u.id === user.id ? { ...u, performanceRecords: newRecords } : u
     ));
+    
+    const currentYear = new Date().getFullYear();
+    fetchApi('updateUserPerformance', { 
+        userId: user.id, 
+        name: user.name,
+        year: currentYear, 
+        record: recordData 
+    }).catch(err => console.error(err));
+
     showAlert(`อัปเดตผลงานเดือน ${selectedMonth} เรียบร้อยแล้ว`);
   };
 
@@ -659,7 +782,7 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
   performanceRecords.forEach(r => {
     const rMonthIndex = months.indexOf(r.month);
     if (rMonthIndex < currentMonthIndex) {
-      pastApprovedFYP += r.approved;
+      pastApprovedFYP += Number(r.approved) || 0;
     }
   });
 
@@ -668,7 +791,7 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
   const dynamicMonthlyGoal = remainingMonths > 0 ? Math.ceil(remainingFYP / remainingMonths) : 0;
 
   const currentMonthRecord = performanceRecords.find(r => r.month === currentMonthName) || { approved: 0 };
-  const currentMonthApproved = currentMonthRecord.approved;
+  const currentMonthApproved = Number(currentMonthRecord.approved) || 0;
   const monthlyPercent = dynamicMonthlyGoal > 0 ? Math.min((currentMonthApproved / dynamicMonthlyGoal) * 100, 100) : (currentMonthApproved > 0 ? 100 : 0);
 
   const handleOpenExportConfig = () => {
@@ -691,17 +814,19 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
                 <head>
                   <title>Performance Report</title>
                   <style>
-                    body { margin: 0; padding: 0; display: flex; justify-content: center; background: #fff; }
-                    img { max-width: 100%; height: auto; }
-                    @page { margin: 0; size: auto; }
+                    body { margin: 0; display: flex; justify-content: center; background: #333; }
+                    img { max-width: 100%; height: auto; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+                    @media print { body { background: #fff; } img { box-shadow: none; } }
                   </style>
                 </head>
                 <body>
-                  <img src="${previewImageUrl}" onload="window.print(); window.close();" />
+                  <img src="${previewImageUrl}" onload="window.print();" />
                 </body>
               </html>
            `);
            printWindow.document.close();
+        } else {
+           showAlert("บราวเซอร์ของคุณปิดกั้นการเปิดหน้าต่างใหม่ (Pop-up)\nกรุณาใช้ปุ่ม 'บันทึกเป็นรูปภาพ' แทนครับ");
         }
      }
   };
@@ -709,9 +834,11 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
   const handleDownloadImage = () => {
     if (previewImageUrl) {
       const link = document.createElement('a');
-      link.download = `Performance_Report_${currentUser.name}.jpg`;
+      link.download = `Performance_${currentUser.name || 'Report'}.jpg`;
       link.href = previewImageUrl;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -822,9 +949,9 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
                   .map((record, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors bg-white">
                     <td className="p-4 font-medium text-[#0B162C]">{record.month}</td>
-                    <td className="p-4 text-right text-slate-600">{record.submitted.toLocaleString()}</td>
-                    <td className="p-4 text-right font-bold text-[#0B162C]">{record.approved.toLocaleString()}</td>
-                    <td className="p-4 text-right font-bold text-green-600">{(record.commission || 0).toLocaleString()}</td>
+                    <td className="p-4 text-right text-slate-600">{Number(record.submitted || 0).toLocaleString()}</td>
+                    <td className="p-4 text-right font-bold text-[#0B162C]">{Number(record.approved || 0).toLocaleString()}</td>
+                    <td className="p-4 text-right font-bold text-green-600">{Number(record.commission || 0).toLocaleString()}</td>
                     <td className="p-4 text-right text-xs text-slate-400">{record.lastUpdated || '-'}</td>
                   </tr>
                 ))}
@@ -977,7 +1104,7 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
       )}
 
       {(exportStep === 'preview' || exportStep === 'config') && (
-        <div className="fixed top-0 left-[-9999px] z-[-1] pointer-events-none opacity-0">
+        <div className="fixed top-[200vh] left-[200vw] pointer-events-none z-[-9999]">
            <div id="hidden-export-node" className={`bg-white relative flex flex-col shrink-0 ${exportFormat === '4:5' ? 'w-[800px] h-[1000px]' : 'w-[794px] h-[1123px]'}`}>
               <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 z-0"></div>
               <div className="absolute top-[-10%] left-[-10%] w-[100%] h-[100%] bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[#D4AF37]/20 via-transparent to-transparent pointer-events-none z-0"></div>
@@ -1121,7 +1248,7 @@ function PerformanceTracker({ user, usersDb, setUsersDb, qualificationsDb, globa
                    <div className="flex flex-col items-center justify-center h-full text-[#0B162C]">
                       <Loader2 className="animate-spin mb-4 text-[#D4AF37]" size={40}/>
                       <p className="font-bold text-lg">กำลังประมวลผลภาพ...</p>
-                      <p className="text-sm text-slate-500">กรุณารอสักครู่</p>
+                      <p className="text-sm text-slate-500">กรุณารอสักครู่...</p>
                    </div>
                 ) : (
                    previewImageUrl && (
@@ -1224,15 +1351,19 @@ function IRRCalculator({ showAlert, user }) {
     setPreviewImageUrl(null);
     
     setTimeout(async () => {
-      const width = exportFormat === '4:5' ? 800 : 794;
-      const imageUrl = await generateCanvasImage('hidden-proposal-node', width);
-      if (imageUrl) {
-        setPreviewImageUrl(imageUrl);
-      } else {
-        showAlert('ไม่สามารถสร้างภาพตัวอย่างได้');
+      try {
+        const width = exportFormat === '4:5' ? 800 : 794;
+        const imageUrl = await generateCanvasImage('hidden-proposal-node', width);
+        if (imageUrl) {
+          setPreviewImageUrl(imageUrl);
+        } else {
+          showAlert('ไม่สามารถสร้างภาพตัวอย่างได้ ลองใหม่อีกครั้ง');
+        }
+      } catch(err) {
+        showAlert('เกิดข้อผิดพลาดในการประมวลผลภาพ');
       }
       setIsGenerating(false);
-    }, 100);
+    }, 1500); 
   };
 
   const addReturnRow = () => setReturns([...returns, { id: Date.now(), startYear: '', endYear: '', amount: '' }]);
@@ -1440,26 +1571,28 @@ function IRRCalculator({ showAlert, user }) {
 
   const handlePrint = () => {
     if (previewImageUrl) {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-         printWindow.document.write(`
-            <html>
-              <head>
-                <title>Proposal</title>
-                <style>
-                  body { margin: 0; padding: 0; display: flex; justify-content: center; background: #fff; }
-                  img { max-width: 100%; height: auto; }
-                  @page { margin: 0; size: auto; }
-                </style>
-              </head>
-              <body>
-                <img src="${previewImageUrl}" onload="window.print(); window.close();" />
-              </body>
-            </html>
-         `);
-         printWindow.document.close();
-      }
-   }
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+           printWindow.document.write(`
+              <html>
+                <head>
+                  <title>Proposal</title>
+                  <style>
+                    body { margin: 0; display: flex; justify-content: center; background: #333; }
+                    img { max-width: 100%; height: auto; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+                    @media print { body { background: #fff; } img { box-shadow: none; } }
+                  </style>
+                </head>
+                <body>
+                  <img src="${previewImageUrl}" onload="window.print();" />
+                </body>
+              </html>
+           `);
+           printWindow.document.close();
+        } else {
+           showAlert("บราวเซอร์ของคุณปิดกั้นการเปิดหน้าต่างใหม่ (Pop-up)\nกรุณาใช้ปุ่ม 'บันทึกเป็นรูปภาพ' แทนครับ");
+        }
+     }
   };
   
   const handleDownloadImage = () => {
@@ -1467,7 +1600,9 @@ function IRRCalculator({ showAlert, user }) {
       const link = document.createElement('a');
       link.download = `Proposal_${customerName || 'Client'}.jpg`;
       link.href = previewImageUrl;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -1780,7 +1915,7 @@ function IRRCalculator({ showAlert, user }) {
       )}
 
       {(exportStep === 'preview' || exportStep === 'config') && (
-        <div className="fixed top-0 left-[-9999px] z-[-1] pointer-events-none opacity-0">
+        <div className="fixed top-[200vh] left-[200vw] pointer-events-none z-[-9999]">
            <div id="hidden-proposal-node" className="flex flex-col gap-0 shadow-2xl">
                <div className={`print-page bg-white relative overflow-hidden shrink-0 flex flex-col ${exportFormat === '4:5' ? 'w-[800px] h-[1000px]' : 'w-[794px] h-[1123px]'}`}>
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 z-0"></div>
@@ -1913,8 +2048,8 @@ function IRRCalculator({ showAlert, user }) {
                      </div>
 
                      <div className={`border-t-2 border-[#E2E8F0] mt-auto flex justify-between items-end ${exportFormat === '4:5' ? 'pt-4' : 'pt-5'}`}>
-                        <div className={`font-bold bg-[#FDFBF7] rounded-xl text-[#D4AF37] border border-[#D4AF37]/30 flex items-center justify-center leading-none ${exportFormat === '4:5' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'}`}>
-                          <span className="pb-0.5">35 DA&K Hub</span>
+                        <div className={`font-bold bg-[#FDFBF7] rounded-xl text-[#D4AF37] border border-[#D4AF37]/30 flex items-center justify-center leading-none ${exportFormat === '4:5' ? 'h-10 px-5 text-sm' : 'h-12 px-6 text-base'}`}>
+                          <span className="-translate-y-[1px]">35 DA&K Hub</span>
                         </div>
                         <div className={`text-right font-medium text-slate-500 flex flex-col gap-0.5 ${exportFormat === '4:5' ? 'text-[9px]' : 'text-xs'}`}>
                           <span>Proposal Generated by <strong className="text-[#0B162C]">{user?.name}</strong></span>
@@ -2312,10 +2447,11 @@ function HealthPresentation() {
   );
 }
 
-function AdminUsers({ users, setUsers, showConfirm }) {
+function AdminUsers({ users = [], setUsers, showConfirm, fetchApi }) {
   const handleDelete = (id) => {
     showConfirm('ต้องการลบสมาชิกนี้ออกจากระบบหรือไม่?', () => {
       setUsers(users.filter(u => u.id !== id));
+      fetchApi('deleteUser', { id }).catch(e => console.error(e));
     });
   };
 
@@ -2342,7 +2478,7 @@ function AdminUsers({ users, setUsers, showConfirm }) {
                 <td className="p-4 text-slate-500">{u.username}</td>
                 <td className="p-4">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${u.role === 'admin' ? 'bg-[#0B162C] text-[#D4AF37]' : 'bg-[#D4AF37]/20 text-[#0B162C]'}`}>
-                    {u.role.toUpperCase()}
+                    {String(u.role || 'member').toUpperCase()}
                   </span>
                 </td>
                 <td className="p-4 text-center">
@@ -2357,7 +2493,7 @@ function AdminUsers({ users, setUsers, showConfirm }) {
   );
 }
 
-function AdminPerformance({ users, setUsers, qualifications, setQualifications, globalTargetFYP, setGlobalTargetFYP, showAlert, showConfirm }) {
+function AdminPerformance({ users = [], setUsers, qualifications = [], setQualifications, globalTargetFYP, setGlobalTargetFYP, showAlert, showConfirm, fetchApi }) {
   const [newQualName, setNewQualName] = useState('');
   const [newQualTarget, setNewQualTarget] = useState('');
   const [editingQual, setEditingQual] = useState(null);
@@ -2373,6 +2509,7 @@ function AdminPerformance({ users, setUsers, qualifications, setQualifications, 
   const handleSaveGlobalTarget = () => {
     if(Number(tempGlobalTarget) <= 0) return showAlert('กรุณากรอกยอดเป้าหมายให้ถูกต้อง');
     setGlobalTargetFYP(Number(tempGlobalTarget));
+    fetchApi('updateSystemValue', { key: 'globalTargetFYP', value: tempGlobalTarget }).catch(e => console.error(e));
     showAlert('อัปเดตเป้าหมายเบี้ยประกันส่วนกลางสำเร็จ');
   };
 
@@ -2381,27 +2518,31 @@ function AdminPerformance({ users, setUsers, qualifications, setQualifications, 
       showAlert('กรุณากรอกชื่อและเป้าหมายคุณวุฒิให้ครบถ้วน');
       return;
     }
-    setQualifications([...qualifications, { id: Date.now(), name: newQualName, target: Number(newQualTarget) }]);
+    const newQual = { id: Date.now(), name: newQualName, target: Number(newQualTarget) };
+    setQualifications([...qualifications, newQual]);
     setNewQualName('');
     setNewQualTarget('');
+    fetchApi('addQualification', newQual).catch(e => console.error(e));
   };
 
   const handleRemoveQual = (id) => {
     showConfirm('ต้องการลบคุณวุฒินี้ใช่หรือไม่? (การเปลี่ยนแปลงจะมีผลกับตัวแทนทุกคน)', () => {
       setQualifications(qualifications.filter(q => q.id !== id));
+      fetchApi('deleteQualification', { id }).catch(e => console.error(e));
     });
   };
 
   const handleSaveEditQual = (e) => {
     e.preventDefault();
     setQualifications(qualifications.map(q => q.id === editingQual.id ? editingQual : q));
+    fetchApi('editQualification', editingQual).catch(e => console.error(e));
     setEditingQual(null);
     showAlert('บันทึกการแก้ไขคุณวุฒิสำเร็จ');
   };
 
   const handleOpenSpecialQual = (user) => {
     setEditingSpecialUser(user);
-    setSpecialQualsList(user.specialQualifications || []);
+    setSpecialQualsList(Array.isArray(user.specialQualifications) ? user.specialQualifications : []);
     setNewSpecialQualName('');
     setNewSpecialQualTarget('');
   };
@@ -2424,6 +2565,7 @@ function AdminPerformance({ users, setUsers, qualifications, setQualifications, 
 
   const handleSaveSpecialQuals = () => {
     setUsers(users.map(u => u.id === editingSpecialUser.id ? { ...u, specialQualifications: specialQualsList } : u));
+    fetchApi('updateUserSpecialQuals', { userId: editingSpecialUser.id, specialQualifications: JSON.stringify(specialQualsList) }).catch(e => console.error(e));
     setEditingSpecialUser(null);
     showAlert('บันทึกคุณวุฒิพิเศษให้สมาชิกสำเร็จ');
   };
@@ -2524,8 +2666,9 @@ function AdminPerformance({ users, setUsers, qualifications, setQualifications, 
             </thead>
             <tbody className="divide-y divide-slate-100">
               {members.map(member => {
-                const totalSub = (member.performanceRecords || []).reduce((sum, r) => sum + r.submitted, 0);
-                const totalApp = (member.performanceRecords || []).reduce((sum, r) => sum + r.approved, 0);
+                const perfRecs = Array.isArray(member.performanceRecords) ? member.performanceRecords : [];
+                const totalSub = perfRecs.reduce((sum, r) => sum + (Number(r.submitted) || 0), 0);
+                const totalApp = perfRecs.reduce((sum, r) => sum + (Number(r.approved) || 0), 0);
                 const percent = globalTargetFYP > 0 ? Math.min((totalApp / globalTargetFYP) * 100, 100) : 0;
 
                 return (
@@ -2682,41 +2825,31 @@ function AdminPerformance({ users, setUsers, qualifications, setQualifications, 
   );
 }
 
-function AdminVideos({ videos, setVideos, showAlert, showConfirm }) {
+function AdminVideos({ videos = [], setVideos, showAlert, showConfirm, fetchApi }) {
   const [newVideo, setNewVideo] = useState({ title: '', url: '', category: '' });
 
-  const handleAddVideo = (e) => {
+  const handleAddVideo = async (e) => {
     e.preventDefault();
     if(!newVideo.title || !newVideo.url || !newVideo.category) return showAlert('กรอกข้อมูลให้ครบ');
     
     let embedUrl = newVideo.url;
-    
     if (!embedUrl.includes('youtube.com/embed/')) {
-      const extractVideoID = (url) => {
-        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
-        return match ? match[1] : null;
-      };
-      
-      const videoId = extractVideoID(newVideo.url);
-      if (videoId) {
-        embedUrl = `https://www.youtube.com/embed/${videoId}`;
-      } else {
-        return showAlert('รูปแบบลิงก์ YouTube ไม่ถูกต้องครับ\n(โปรดใช้ลิงก์คลิปปกติ หรือ Shorts จาก Youtube.com)');
-      }
+      const match = embedUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
+      if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}`;
     }
 
     const payload = { ...newVideo, url: embedUrl, id: Date.now() };
     setVideos([...videos, payload]);
     setNewVideo({ title: '', url: '', category: '' });
     
-    // API Sync
-    fetchApi("addVideo", payload).catch(() => {});
-    showAlert('เพิ่มวีดีโอเรียบร้อยแล้ว');
+    // เรียก API ไปที่ Sheets
+    fetchApi("addVideo", payload).then(()=>showAlert('เพิ่มวีดีโอเรียบร้อยแล้ว')).catch(()=>showAlert('เกิดข้อผิดพลาดในการบันทึก'));
   };
 
   const handleDelete = (id) => {
     showConfirm('ต้องการลบวีดีโอนี้ใช่หรือไม่?', () => {
       setVideos(videos.filter(v => v.id !== id));
+      fetchApi('deleteVideo', { id }).catch(e => console.error(e));
     });
   }
 
@@ -2725,76 +2858,40 @@ function AdminVideos({ videos, setVideos, showAlert, showConfirm }) {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="text-xl font-bold text-[#0B162C] mb-6 flex items-center gap-2"><Video className="text-[#D4AF37]" /> เพิ่มวีดีโอความรู้ใหม่</h3>
         <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">ชื่อคลิป / หลักสูตร</label>
-            <input type="text" required value={newVideo.title} onChange={e=>setNewVideo({...newVideo, title: e.target.value})} className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">หมวดหมู่</label>
-            <input type="text" required value={newVideo.category} onChange={e=>setNewVideo({...newVideo, category: e.target.value})} placeholder="เช่น ทักษะการขาย, สินค้า" className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-bold text-slate-700 mb-2">ลิงก์ YouTube (URL)</label>
-            <input type="text" required value={newVideo.url} onChange={e=>setNewVideo({...newVideo, url: e.target.value})} placeholder="https://www.youtube.com/watch?v=..." className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow" />
-          </div>
+          <input type="text" required value={newVideo.title} onChange={e=>setNewVideo({...newVideo, title: e.target.value})} placeholder="ชื่อคลิป" className="w-full p-3 border border-slate-300 rounded-xl outline-none" />
+          <input type="text" required value={newVideo.category} onChange={e=>setNewVideo({...newVideo, category: e.target.value})} placeholder="หมวดหมู่" className="w-full p-3 border border-slate-300 rounded-xl outline-none" />
+          <input type="text" required value={newVideo.url} onChange={e=>setNewVideo({...newVideo, url: e.target.value})} placeholder="ลิงก์ YouTube" className="w-full p-3 border border-slate-300 rounded-xl outline-none md:col-span-2" />
           <div className="md:col-span-2 mt-2">
-            <button type="submit" className="bg-[#0B162C] text-[#D4AF37] px-8 py-3 rounded-xl font-bold hover:bg-[#152238] shadow-md shadow-[#0B162C]/10 transition transform hover:-translate-y-0.5">เพิ่มวีดีโอเข้าระบบ</button>
+            <button type="submit" className="bg-[#0B162C] text-[#D4AF37] px-8 py-3 rounded-xl font-bold hover:bg-[#152238] transition transform hover:-translate-y-0.5">เพิ่มวีดีโอเข้าระบบ</button>
           </div>
         </form>
       </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-         <div className="p-6 border-b border-slate-200 bg-[#FDFBF7]">
-          <h3 className="text-xl font-bold text-[#0B162C]">รายการวีดีโอในระบบ</h3>
-        </div>
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-white border-b border-slate-200">
-            <tr>
-              <th className="p-4 w-16"></th>
-              <th className="p-4 font-bold text-slate-600">ชื่อคลิป</th>
-              <th className="p-4 font-bold text-slate-600">หมวดหมู่</th>
-              <th className="p-4 font-bold text-slate-600 text-center">จัดการ</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {videos.map(v => (
-              <tr key={v.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 text-center"><PlayCircle className="text-[#D4AF37] mx-auto"/></td>
-                <td className="p-4 font-medium text-[#0B162C]">{v.title}</td>
-                <td className="p-4"><span className="bg-[#FDFBF7] border border-[#D4AF37]/30 text-[#0B162C] px-3 py-1 rounded-full text-xs font-bold">{v.category}</span></td>
-                <td className="p-4 text-center">
-                  <button onClick={() => handleDelete(v.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={18}/></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h3 className="text-xl font-bold text-[#0B162C] mb-4">รายการวีดีโอในระบบ ({videos.length})</h3>
+        <ul className="space-y-2">
+           {videos.map(v => <li key={v.id} className="p-3 bg-slate-50 rounded-lg flex justify-between"><span className="font-medium text-[#0B162C]">{v.title}</span><span className="text-sm text-[#D4AF37]">{v.category}</span></li>)}
+        </ul>
       </div>
     </div>
   );
 }
 
-function AdminContents({ contents, setContents, showAlert, showConfirm }) {
+function AdminContents({ contents = [], setContents, showAlert, showConfirm, fetchApi }) {
   const [newContent, setNewContent] = useState({ type: 'image', title: '', url: '', content: '' });
 
-  const handleAddContent = (e) => {
+  const handleAddContent = async (e) => {
     e.preventDefault();
-    if(!newContent.title) return showAlert('กรุณากรอกชื่อคอนเทนต์');
-    if(newContent.type === 'caption' && !newContent.content) return showAlert('กรุณากรอกข้อความแคปชั่น');
-    if(newContent.type !== 'caption' && !newContent.url) return showAlert('กรุณากรอกลิงก์รูปภาพ/วีดีโอ');
-    
     const payload = { ...newContent, id: Date.now() };
     setContents([payload, ...contents]);
     setNewContent({ type: 'image', title: '', url: '', content: '' });
     
-    // API Sync
-    fetchApi("addContent", payload).catch(() => {});
-    showAlert('เพิ่มคอนเทนต์เรียบร้อยแล้ว');
+    fetchApi("addContent", payload).then(()=>showAlert('เพิ่มคอนเทนต์เรียบร้อยแล้ว'));
   };
 
   const handleDelete = (id) => {
     showConfirm('ต้องการลบคอนเทนต์นี้ใช่หรือไม่?', () => {
       setContents(contents.filter(c => c.id !== id));
+      fetchApi('deleteContent', { id }).catch(e => console.error(e));
     });
   };
 
@@ -2803,67 +2900,23 @@ function AdminContents({ contents, setContents, showAlert, showConfirm }) {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="text-xl font-bold text-[#0B162C] mb-6 flex items-center gap-2"><ImageIcon className="text-[#D4AF37]" /> เพิ่มคอนเทนต์ใหม่</h3>
         <form onSubmit={handleAddContent} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">ประเภท</label>
-            <select value={newContent.type} onChange={e=>setNewContent({...newContent, type: e.target.value})} className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow bg-white text-[#0B162C] font-medium">
-              <option value="image">รูปภาพ</option>
-              <option value="video">วีดีโอ (คลิปสั้น)</option>
-              <option value="caption">แคปชั่น (ข้อความ)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">ชื่อคอนเทนต์</label>
-            <input type="text" required value={newContent.title} onChange={e=>setNewContent({...newContent, title: e.target.value})} className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow" placeholder="เช่น แคปชั่นขายประกันสุขภาพ" />
-          </div>
-          
-          {newContent.type !== 'caption' && (
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-slate-700 mb-2">ลิงก์ URL (รูปภาพ หรือ คลิปวีดีโอ)</label>
-              <input type="text" required value={newContent.url} onChange={e=>setNewContent({...newContent, url: e.target.value})} placeholder="https://..." className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow" />
-            </div>
-          )}
-          
-          {newContent.type === 'caption' && (
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-slate-700 mb-2">ข้อความแคปชั่น</label>
-              <textarea required value={newContent.content} onChange={e=>setNewContent({...newContent, content: e.target.value})} placeholder="พิมพ์ข้อความแคปชั่นที่นี่..." rows="3" className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#D4AF37] transition-shadow"></textarea>
-            </div>
-          )}
-
+          <select value={newContent.type} onChange={e=>setNewContent({...newContent, type: e.target.value})} className="w-full p-3 border border-slate-300 rounded-xl outline-none">
+            <option value="image">รูปภาพ</option>
+            <option value="caption">แคปชั่น (ข้อความ)</option>
+          </select>
+          <input type="text" required value={newContent.title} onChange={e=>setNewContent({...newContent, title: e.target.value})} placeholder="ชื่อคอนเทนต์" className="w-full p-3 border border-slate-300 rounded-xl outline-none" />
+          {newContent.type === 'image' && <input type="text" required value={newContent.url} onChange={e=>setNewContent({...newContent, url: e.target.value})} placeholder="URL รูปภาพ" className="w-full p-3 border border-slate-300 rounded-xl md:col-span-2 outline-none" />}
+          {newContent.type === 'caption' && <textarea required value={newContent.content} onChange={e=>setNewContent({...newContent, content: e.target.value})} placeholder="ข้อความแคปชั่น..." className="w-full p-3 border border-slate-300 rounded-xl md:col-span-2 outline-none"></textarea>}
           <div className="md:col-span-2 mt-2">
-            <button type="submit" className="bg-[#0B162C] text-[#D4AF37] px-8 py-3 rounded-xl font-bold hover:bg-[#152238] shadow-md shadow-[#0B162C]/10 transition transform hover:-translate-y-0.5">เพิ่มคอนเทนต์เข้าระบบ</button>
+            <button type="submit" className="bg-[#0B162C] text-[#D4AF37] px-8 py-3 rounded-xl font-bold hover:bg-[#152238] transition transform hover:-translate-y-0.5">เพิ่มเข้าระบบ</button>
           </div>
         </form>
       </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-         <div className="p-6 border-b border-slate-200 bg-[#FDFBF7]">
-          <h3 className="text-xl font-bold text-[#0B162C]">รายการคอนเทนต์ในระบบ</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead className="bg-white border-b border-slate-200">
-              <tr>
-                <th className="p-4 font-bold text-slate-600 w-28">ประเภท</th>
-                <th className="p-4 font-bold text-slate-600">ชื่อคอนเทนต์</th>
-                <th className="p-4 font-bold text-slate-600 text-center w-24">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {contents.map(c => (
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4">
-                    <span className="bg-[#FDFBF7] border border-[#D4AF37]/30 text-[#0B162C] px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{c.type}</span>
-                  </td>
-                  <td className="p-4 font-medium text-[#0B162C]">{c.title}</td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={18}/></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h3 className="text-xl font-bold text-[#0B162C] mb-4">รายการคอนเทนต์ในระบบ ({contents.length})</h3>
+        <ul className="space-y-2">
+           {contents.map(c => <li key={c.id} className="p-3 bg-slate-50 rounded-lg flex justify-between"><span className="font-medium text-[#0B162C]">{c.title}</span><span className="text-sm uppercase text-[#D4AF37]">{c.type}</span></li>)}
+        </ul>
       </div>
     </div>
   );
